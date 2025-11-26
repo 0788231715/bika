@@ -1,4 +1,3 @@
-# admin.py
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
@@ -8,7 +7,7 @@ from datetime import timedelta
 from bika_project import settings
 from .models import *
 
-# Dashboard View (needs to be defined before admin registrations)
+# Dashboard View
 @staff_member_required
 def admin_dashboard(request):
     """Simplified admin dashboard without complex calculations"""
@@ -104,7 +103,7 @@ def admin_dashboard(request):
     
     return render(request, 'bika/pages/admin/dashboard.html', context)
 
-# Admin Model Registrations
+# Admin Model Registrations - USING DECORATORS ONLY (no duplicate registrations)
 @admin.register(CustomUser)
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ['username', 'email', 'user_type', 'is_active', 'date_joined']
@@ -187,12 +186,73 @@ class FAQAdmin(admin.ModelAdmin):
     search_fields = ['question', 'answer']
     list_editable = ['display_order', 'is_active']
 
-# Register remaining models without decorators (to avoid duplicates)
-admin.site.register(ProductImage)
-admin.site.register(ProductReview)
-admin.site.register(Wishlist)
-admin.site.register(Cart)
-admin.site.register(OrderItem)
+@admin.register(ProductImage)
+class ProductImageAdmin(admin.ModelAdmin):
+    list_display = ['product', 'alt_text', 'display_order', 'is_primary']
+    list_filter = ['is_primary']
+    search_fields = ['product__name', 'alt_text']
+
+@admin.register(ProductReview)
+class ProductReviewAdmin(admin.ModelAdmin):
+    list_display = ['product', 'user', 'rating', 'is_approved', 'created_at']
+    list_filter = ['rating', 'is_approved', 'created_at']
+    search_fields = ['product__name', 'user__username', 'title']
+
+@admin.register(Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ['user', 'product', 'added_at']
+    list_filter = ['added_at']
+    search_fields = ['user__username', 'product__name']
+
+@admin.register(Cart)
+class CartAdmin(admin.ModelAdmin):
+    list_display = ['user', 'product', 'quantity', 'added_at']
+    list_filter = ['added_at']
+    search_fields = ['user__username', 'product__name']
+
+@admin.register(OrderItem)
+class OrderItemAdmin(admin.ModelAdmin):
+    list_display = ['order', 'product', 'quantity', 'price']
+    search_fields = ['order__order_number', 'product__name']
+
+@admin.register(StorageLocation)
+class StorageLocationAdmin(admin.ModelAdmin):
+    list_display = ['name', 'address', 'capacity', 'current_occupancy', 'available_capacity', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['name', 'address']
+
+@admin.register(ProductDataset)
+class ProductDatasetAdmin(admin.ModelAdmin):
+    list_display = ['name', 'dataset_type', 'row_count', 'is_active', 'created_at']
+    list_filter = ['dataset_type', 'is_active', 'created_at']
+    search_fields = ['name', 'description']
+
+@admin.register(TrainedModel)
+class TrainedModelAdmin(admin.ModelAdmin):
+    list_display = ['name', 'model_type', 'dataset', 'accuracy', 'training_date', 'is_active']
+    list_filter = ['model_type', 'is_active', 'training_date']
+    search_fields = ['name', 'dataset__name']
+
+@admin.register(RealTimeSensorData)
+class RealTimeSensorDataAdmin(admin.ModelAdmin):
+    list_display = ['product', 'sensor_type', 'value', 'unit', 'location', 'recorded_at']
+    list_filter = ['sensor_type', 'location', 'recorded_at']
+    search_fields = ['product__name']
+    readonly_fields = ['recorded_at']
+
+@admin.register(ProductAlert)
+class ProductAlertAdmin(admin.ModelAdmin):
+    list_display = ['product', 'alert_type', 'severity', 'is_resolved', 'created_at']
+    list_filter = ['alert_type', 'severity', 'is_resolved', 'created_at']
+    search_fields = ['product__name', 'message']
+    readonly_fields = ['created_at']
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ['user', 'title', 'notification_type', 'is_read', 'created_at']
+    list_filter = ['notification_type', 'is_read', 'created_at']
+    search_fields = ['user__username', 'title', 'message']
+    readonly_fields = ['created_at']
 
 # Add dashboard to admin URLs
 from django.urls import path

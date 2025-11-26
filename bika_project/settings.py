@@ -129,3 +129,14 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # For developm
 # DEFAULT_FROM_EMAIL = 'Bika <noreply@bika.com>'
 
 AUTH_USER_MODEL = 'bika.CustomUser'
+# Stripe Configuration (if using payments)
+STRIPE_PUBLISHABLE_KEY = 'your_publishable_key_here'
+STRIPE_SECRET_KEY = 'your_secret_key_here'
+
+# Media files configuration
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Create required directories
+os.makedirs(os.path.join(MEDIA_ROOT, 'trained_models'), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'datasets'), exist_ok=True)

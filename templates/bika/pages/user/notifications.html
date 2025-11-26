@@ -1,0 +1,324 @@
+{% extends 'bika/base.html' %}
+{% load static %}
+
+{% block title %}Notifications - Bika{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-bell me-2"></i>Notifications</h1>
+                <div>
+                    <span class="badge bg-primary">{{ unread_count }} unread</span>
+                    {% if unread_count > 0 %}
+                    <button class="btn btn-sm btn-outline-success ms-2" onclick="markAllAsRead()">
+                        <i class="fas fa-check-double me-1"></i>Mark All as Read
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Notification Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <select class="form-select" onchange="filterNotifications(this.value)">
+                                <option value="">All Types</option>
+                                <option value="product_alert">Product Alerts</option>
+                                <option value="order_update">Order Updates</option>
+                                <option value="system_alert">System Alerts</option>
+                                <option value="urgent_alert">Urgent Alerts</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select" onchange="filterByStatus(this.value)">
+                                <option value="">All Status</option>
+                                <option value="unread">Unread Only</option>
+                                <option value="read">Read Only</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <input type="text" class="form-control" placeholder="Search notifications..." id="notificationSearch">
+                                <button class="btn btn-outline-secondary" type="button" onclick="searchNotifications()">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if notifications %}
+            <div class="list-group" id="notificationList">
+                {% for notification in notifications %}
+                <div class="list-group-item notification-item {% if not notification.is_read %}list-group-item-warning{% endif %}" 
+                     data-type="{{ notification.notification_type }}"
+                     data-status="{% if notification.is_read %}read{% else %}unread{% endif %}">
+                    <div class="d-flex w-100 justify-content-between align-items-start">
+                        <div class="flex-grow-1 me-3">
+                            <div class="d-flex align-items-center mb-2">
+                                {% if not notification.is_read %}
+                                <span class="badge bg-danger me-2">NEW</span>
+                                {% endif %}
+                                <h5 class="mb-0">{{ notification.title }}</h5>
+                            </div>
+                            <p class="mb-2">{{ notification.message }}</p>
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-secondary me-2">
+                                    <i class="fas fa-{{ notification.notification_type|default:'info' }} me-1"></i>
+                                    {{ notification.get_notification_type_display }}
+                                </span>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    {{ notification.created_at|timesince }} ago
+                                </small>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column align-items-end">
+                            {% if not notification.is_read %}
+                            <button onclick="markAsRead({{ notification.id }})" 
+                                    class="btn btn-sm btn-outline-success mb-2">
+                                <i class="fas fa-check me-1"></i>Mark Read
+                            </button>
+                            {% else %}
+                            <span class="badge bg-secondary mb-2">Read</span>
+                            {% endif %}
+                            <button onclick="deleteNotification({{ notification.id }})" 
+                                    class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-trash me-1"></i>Delete
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Related Actions -->
+                    {% if notification.related_object_type and notification.related_object_id %}
+                    <div class="mt-3 pt-2 border-top">
+                        <small>
+                            <a href="#" class="text-decoration-none">
+                                <i class="fas fa-external-link-alt me-1"></i>
+                                View related {{ notification.related_object_type }}
+                            </a>
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Empty State for Filtering -->
+            <div id="noNotifications" class="text-center py-5 d-none">
+                <div class="mb-4">
+                    <i class="fas fa-search fa-3x text-muted"></i>
+                </div>
+                <h4>No notifications found</h4>
+                <p class="text-muted">Try adjusting your filters or search terms.</p>
+                <button class="btn btn-outline-primary" onclick="clearFilters()">
+                    Clear Filters
+                </button>
+            </div>
+
+            {% else %}
+            <!-- Empty State for No Notifications -->
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-bell-slash fa-4x text-muted"></i>
+                </div>
+                <h3>No notifications yet</h3>
+                <p class="text-muted mb-4">You're all caught up! New notifications will appear here.</p>
+                <div class="d-flex justify-content-center gap-2">
+                    <a href="{% url 'bika:product_list' %}" class="btn btn-primary">
+                        <i class="fas fa-shopping-bag me-2"></i>Browse Products
+                    </a>
+                    <a href="{% url 'bika:user_orders' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-receipt me-2"></i>View Orders
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Filter notifications by type
+    function filterNotifications(type) {
+        const notifications = document.querySelectorAll('.notification-item');
+        let visibleCount = 0;
+        
+        notifications.forEach(notification => {
+            if (!type || notification.dataset.type === type) {
+                notification.style.display = '';
+                visibleCount++;
+            } else {
+                notification.style.display = 'none';
+            }
+        });
+        
+        toggleEmptyState(visibleCount);
+    }
+
+    // Filter by read status
+    function filterByStatus(status) {
+        const notifications = document.querySelectorAll('.notification-item');
+        let visibleCount = 0;
+        
+        notifications.forEach(notification => {
+            if (!status || notification.dataset.status === status) {
+                notification.style.display = '';
+                visibleCount++;
+            } else {
+                notification.style.display = 'none';
+            }
+        });
+        
+        toggleEmptyState(visibleCount);
+    }
+
+    // Search notifications
+    function searchNotifications() {
+        const searchTerm = document.getElementById('notificationSearch').value.toLowerCase();
+        const notifications = document.querySelectorAll('.notification-item');
+        let visibleCount = 0;
+        
+        notifications.forEach(notification => {
+            const text = notification.textContent.toLowerCase();
+            if (text.includes(searchTerm)) {
+                notification.style.display = '';
+                visibleCount++;
+            } else {
+                notification.style.display = 'none';
+            }
+        });
+        
+        toggleEmptyState(visibleCount);
+    }
+
+    // Toggle empty state message
+    function toggleEmptyState(visibleCount) {
+        const emptyState = document.getElementById('noNotifications');
+        const notificationList = document.getElementById('notificationList');
+        
+        if (visibleCount === 0 && notificationList) {
+            emptyState.classList.remove('d-none');
+            notificationList.classList.add('d-none');
+        } else {
+            emptyState.classList.add('d-none');
+            if (notificationList) notificationList.classList.remove('d-none');
+        }
+    }
+
+    // Clear all filters
+    function clearFilters() {
+        document.querySelectorAll('select').forEach(select => select.value = '');
+        document.getElementById('notificationSearch').value = '';
+        filterNotifications('');
+    }
+
+    // Mark notification as read
+    function markAsRead(notificationId) {
+        fetch(`/notifications/${notificationId}/read/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the UI
+                const notificationItem = document.querySelector(`[onclick="markAsRead(${notificationId})"]`)?.closest('.notification-item');
+                if (notificationItem) {
+                    notificationItem.classList.remove('list-group-item-warning');
+                    notificationItem.dataset.status = 'read';
+                    
+                    // Update the button
+                    const button = notificationItem.querySelector('button');
+                    if (button) {
+                        button.outerHTML = '<span class="badge bg-secondary mb-2">Read</span>';
+                    }
+                    
+                    // Update unread count
+                    updateUnreadCount();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error marking notification as read:', error);
+            alert('Error updating notification. Please try again.');
+        });
+    }
+
+    // Mark all as read
+    function markAllAsRead() {
+        if (!confirm('Mark all notifications as read?')) {
+            return;
+        }
+
+        fetch('{% url "bika:mark_all_notifications_read" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error marking all as read:', error);
+            alert('Error updating notifications. Please try again.');
+        });
+    }
+
+    // Delete notification
+    function deleteNotification(notificationId) {
+        if (!confirm('Delete this notification?')) {
+            return;
+        }
+
+        fetch(`/notifications/${notificationId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove from UI
+                const notificationItem = document.querySelector(`[onclick="deleteNotification(${notificationId})"]`)?.closest('.notification-item');
+                if (notificationItem) {
+                    notificationItem.remove();
+                    updateUnreadCount();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting notification:', error);
+            alert('Error deleting notification. Please try again.');
+        });
+    }
+
+    // Update unread count in header
+    function updateUnreadCount() {
+        // This would typically update the badge in the header
+        checkRealNotifications();
+    }
+
+    // Initialize filters
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add search on input for real-time filtering
+        document.getElementById('notificationSearch').addEventListener('input', searchNotifications);
+    });
+</script>
+{% endblock %}

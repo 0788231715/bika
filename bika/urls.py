@@ -81,6 +81,26 @@ urlpatterns = [
     path('cart/update/<int:product_id>/', views.update_cart, name='update_cart'),
     path('cart/remove/<int:product_id>/', views.remove_from_cart, name='remove_from_cart'),
     path('settings/', views.user_settings, name='user_settings'),
+    # Notification URLs
+    path('notifications/', views.notifications_view, name='notifications'),
+    path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('api/notifications/unread-count/', views.unread_notifications_count, name='unread_notifications_count'),
+    
+    # Storage and Tracking URLs
+    path('storage-sites/', views.storage_sites, name='storage_sites'),
+    path('track-products/', views.track_my_products, name='track_my_products'),
+    path('scan-product/', views.scan_product, name='scan_product'),
+    
+    # API URLs
+    path('api/product/<str:barcode>/', views.api_product_detail, name='api_product_detail'),
+    
+    # AI Service URLs
+    path('api/upload-dataset/', views.upload_dataset, name='upload_dataset'),
+    path('api/train-model/', views.train_model, name='train_model'),
+    path('api/sensor-data/', views.receive_sensor_data, name='receive_sensor_data'),
+    # Add these to your urlpatterns
+    path('notifications/mark-all-read/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
+    path('notifications/<int:notification_id>/delete/', views.delete_notification, name='delete_notification'),
     
     # AJAX/API endpoints
     path('newsletter/subscribe/', views.newsletter_subscribe, name='newsletter_subscribe'),

@@ -1,0 +1,153 @@
+{% extends 'bika/base.html' %}
+{% load static %}
+
+{% block title %}Storage Sites - Bika Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-warehouse me-2"></i>Storage Sites Management</h1>
+                <a href="{% url 'admin:bika_storagelocation_add' %}" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>Add New Site
+                </a>
+            </div>
+
+            {% if sites %}
+            <div class="row">
+                {% for site in sites %}
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card dashboard-card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h5 class="card-title">{{ site.name }}</h5>
+                                <span class="badge {% if site.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                                    {% if site.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </div>
+                            
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-map-marker-alt me-2"></i>{{ site.address|truncatewords:10 }}
+                            </p>
+                            
+                            <div class="storage-info mb-3">
+                                <div class="progress mb-2" style="height: 8px;">
+                                    <div class="progress-bar {% if site.available_capacity < site.capacity|divisibleby:4 %}bg-warning{% else %}bg-success{% endif %}" 
+                                         role="progressbar" 
+                                         style="width: {% widthratio site.current_occupancy site.capacity 100 %}%"
+                                         aria-valuenow="{{ site.current_occupancy }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="{{ site.capacity }}">
+                                    </div>
+                                </div>
+                                <small class="text-muted">
+                                    {{ site.current_occupancy }}/{{ site.capacity }} units occupied 
+                                    ({{ site.available_capacity }} available)
+                                </small>
+                            </div>
+
+                            {% if site.latitude and site.longitude %}
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-map-pin me-1"></i>
+                                    Coordinates: {{ site.latitude|floatformat:4 }}, {{ site.longitude|floatformat:4 }}
+                                </small>
+                            </div>
+                            {% endif %}
+
+                            <div class="d-flex gap-2">
+                                <a href="{% url 'admin:bika_storagelocation_change' site.id %}" 
+                                   class="btn btn-sm btn-outline-primary flex-fill">
+                                    <i class="fas fa-edit me-1"></i>Edit
+                                </a>
+                                <a href="#" class="btn btn-sm btn-outline-info flex-fill">
+                                    <i class="fas fa-chart-bar me-1"></i>Stats
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <small class="text-muted">
+                                Updated: {{ site.updated_at|timesince }} ago
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-warehouse fa-4x text-muted"></i>
+                </div>
+                <h3>No Storage Sites Found</h3>
+                <p class="text-muted mb-4">Get started by adding your first storage location.</p>
+                <a href="{% url 'admin:bika_storagelocation_add' %}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-plus me-2"></i>Add First Storage Site
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Storage Statistics -->
+    {% if sites %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Storage Overview
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h3 class="text-primary">{{ sites.count }}</h3>
+                                <p class="mb-0 text-muted">Total Sites</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h3 class="text-success">{{ sites|length }}</h3>
+                                <p class="mb-0 text-muted">Active Sites</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h3 class="text-info">
+                                    {% with total_capacity=0 %}
+                                        {% for site in sites %}
+                                            {% widthratio site.current_occupancy 1 1 as occupied %}
+                                            {% with total_capacity=total_capacity|add:occupied %}
+                                            {% endwith %}
+                                        {% endfor %}
+                                        {{ total_capacity }}
+                                    {% endwith %}
+                                </h3>
+                                <p class="mb-0 text-muted">Total Occupied</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h3 class="text-warning">
+                                    {% with total_available=0 %}
+                                        {% for site in sites %}
+                                            {% with total_available=total_available|add:site.available_capacity %}
+                                            {% endwith %}
+                                        {% endfor %}
+                                        {{ total_available }}
+                                    {% endwith %}
+                                </h3>
+                                <p class="mb-0 text-muted">Total Available</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

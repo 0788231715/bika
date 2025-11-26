@@ -1,0 +1,265 @@
+{% extends 'bika/base.html' %}
+{% load static %}
+
+{% block title %}Scan Product - Bika{% endblock %}
+
+{% block extra_css %}
+<style>
+    .scanner-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    #barcodeScanner {
+        width: 100%;
+        height: 400px;
+        background: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+    }
+    .scanner-overlay {
+        position: relative;
+        overflow: hidden;
+    }
+    .scanner-guide {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #007bff;
+        animation: scan 2s ease-in-out infinite;
+    }
+    @keyframes scan {
+        0% { top: 20%; }
+        50% { top: 80%; }
+        100% { top: 20%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="card-title mb-0">
+                        <i class="fas fa-qrcode me-2"></i>Scan Product Barcode
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Scanner Instructions -->
+                    <div class="alert alert-info mb-4">
+                        <h6><i class="fas fa-info-circle me-2"></i>How to Scan:</h6>
+                        <ul class="mb-0">
+                            <li>Allow camera access when prompted</li>
+                            <li>Point camera at product barcode</li>
+                            <li>Hold steady until barcode is detected</li>
+                            <li>Product details will load automatically</li>
+                        </ul>
+                    </div>
+
+                    <!-- Scanner Interface -->
+                    <div class="scanner-container mb-4">
+                        <div class="scanner-overlay">
+                            <video id="barcodeScanner" playsinline>
+                                Your browser doesn't support video streaming.
+                            </video>
+                            <div class="scanner-guide"></div>
+                        </div>
+                        
+                        <!-- Loading Indicator -->
+                        <div id="scanLoading" class="text-center mt-3 d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Processing barcode...</p>
+                        </div>
+                    </div>
+
+                    <!-- Manual Input Fallback -->
+                    <div class="manual-input mt-4">
+                        <h6 class="text-muted mb-3">Or enter barcode manually:</h6>
+                        <form id="manualScanForm" class="row g-2">
+                            <div class="col">
+                                <input type="text" 
+                                       id="manualBarcode" 
+                                       class="form-control" 
+                                       placeholder="Enter barcode number"
+                                       maxlength="50">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search me-1"></i>Lookup
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Camera Permissions Alert -->
+                    <div id="cameraAlert" class="alert alert-warning mt-3 d-none">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Camera access required:</strong> Please allow camera permissions to use the scanner.
+                    </div>
+
+                    <!-- Scanner Not Supported Alert -->
+                    <div id="unsupportedAlert" class="alert alert-warning mt-3 d-none">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Scanner not supported:</strong> Your browser doesn't support barcode scanning. Use manual input instead.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Scans (if any) -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Scanning Tips
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Supported Barcode Types:</h6>
+                            <ul class="small">
+                                <li>UPC-A (12-digit)</li>
+                                <li>EAN-13 (13-digit)</li>
+                                <li>EAN-8 (8-digit)</li>
+                                <li>Code 128</li>
+                                <li>QR Codes</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Best Practices:</h6>
+                            <ul class="small">
+                                <li>Ensure good lighting</li>
+                                <li>Hold device steady</li>
+                                <li>Keep barcode flat and visible</li>
+                                <li>Avoid glare and shadows</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const manualForm = document.getElementById('manualScanForm');
+        const manualInput = document.getElementById('manualBarcode');
+        const cameraAlert = document.getElementById('cameraAlert');
+        const unsupportedAlert = document.getElementById('unsupportedAlert');
+
+        // Check if barcode detection is supported
+        if (!('BarcodeDetector' in window)) {
+            unsupportedAlert.classList.remove('d-none');
+        }
+
+        // Initialize scanner
+        initializeRealBarcodeScanner();
+
+        // Manual form submission
+        manualForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const barcode = manualInput.value.trim();
+            if (barcode) {
+                handleDetectedBarcode(barcode);
+                manualInput.value = '';
+            }
+        });
+
+        // Camera permission error handling
+        function showCameraError() {
+            cameraAlert.classList.remove('d-none');
+        }
+
+        // Enhanced barcode detection
+        function initializeBarcodeDetection(video) {
+            if (!('BarcodeDetector' in window)) {
+                showCameraError();
+                return;
+            }
+
+            const barcodeDetector = new BarcodeDetector({
+                formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a']
+            });
+
+            let isProcessing = false;
+
+            function detectBarcode() {
+                if (isProcessing) {
+                    requestAnimationFrame(detectBarcode);
+                    return;
+                }
+
+                barcodeDetector.detect(video)
+                    .then(barcodes => {
+                        if (barcodes.length > 0 && !isProcessing) {
+                            isProcessing = true;
+                            const barcode = barcodes[0];
+                            handleDetectedBarcode(barcode.rawValue);
+                            
+                            // Prevent multiple detections for the same barcode
+                            setTimeout(() => {
+                                isProcessing = false;
+                            }, 2000);
+                        }
+                        requestAnimationFrame(detectBarcode);
+                    })
+                    .catch(err => {
+                        console.error('Barcode detection error:', err);
+                        requestAnimationFrame(detectBarcode);
+                    });
+            }
+
+            detectBarcode();
+        }
+
+        // Enhanced barcode handling
+        function handleDetectedBarcode(barcodeValue) {
+            console.log('Barcode detected:', barcodeValue);
+            
+            // Show loading indicator
+            const loadingIndicator = document.getElementById('scanLoading');
+            if (loadingIndicator) {
+                loadingIndicator.classList.remove('d-none');
+            }
+
+            // Look up product
+            fetch(`/api/product/${barcodeValue}/`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Product not found');
+                    }
+                    return response.json();
+                })
+                .then(productData => {
+                    // Redirect to product page
+                    if (productData.slug) {
+                        window.location.href = `/products/${productData.slug}/`;
+                    } else {
+                        alert('Product found but no details available.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Product lookup error:', error);
+                    alert('Product not found. Please try another barcode or check the product is in our system.');
+                })
+                .finally(() => {
+                    // Hide loading indicator
+                    if (loadingIndicator) {
+                        loadingIndicator.classList.add('d-none');
+                    }
+                });
+        }
+    });
+</script>
+{% endblock %}

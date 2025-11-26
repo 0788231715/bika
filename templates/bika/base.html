@@ -19,11 +19,105 @@
     <!-- Navigation -->
     {% include 'bika/partials/header.html' %}
 
+    <!-- Notification Alerts -->
+    {% if user.is_authenticated %}
+    <div class="container-fluid bg-light border-bottom">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center py-2">
+                        <div class="notification-alerts">
+                            <a href="{% url 'bika:notifications' %}" class="btn btn-sm btn-warning position-relative">
+                                <i class="fas fa-bell"></i>
+                                Notifications
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notificationCount">
+                                    0
+                                </span>
+                            </a>
+                        </div>
+                        
+                        <!-- Quick Actions for Vendors/Admins -->
+                        {% if user.is_vendor or user.is_staff %}
+                        <div class="quick-actions">
+                            <div class="btn-group btn-group-sm">
+                                {% if user.is_staff %}
+                                <a href="{% url 'bika:admin_dashboard' %}" class="btn btn-outline-primary">
+                                    <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+                                </a>
+                                <a href="{% url 'bika:storage_sites' %}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-warehouse"></i> Storage Sites
+                                </a>
+                                <a href="/admin/bika/productdataset/" class="btn btn-outline-info">
+                                    <i class="fas fa-database"></i> Manage Datasets
+                                </a>
+                                {% endif %}
+                                
+                                {% if user.is_vendor %}
+                                <a href="{% url 'bika:track_my_products' %}" class="btn btn-outline-success">
+                                    <i class="fas fa-map-marker-alt"></i> Track Products
+                                </a>
+                                <a href="{% url 'bika:vendor_dashboard' %}" class="btn btn-outline-info">
+                                    <i class="fas fa-store"></i> Vendor Dashboard
+                                </a>
+                                {% endif %}
+                                
+                                <a href="{% url 'bika:scan_product' %}" class="btn btn-outline-warning">
+                                    <i class="fas fa-qrcode"></i> Scan Product
+                                </a>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Real-time Alert Banner -->
+    {% if user.is_staff or user.is_vendor %}
+    <div id="realTimeAlerts" class="alert alert-warning alert-dismissible fade show mb-0 d-none" role="alert">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-10">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong id="alertTitle">System Alert:</strong>
+                    <span id="alertMessage">Monitoring active</span>
+                </div>
+                <div class="col-md-2 text-end">
+                    <a href="{% url 'bika:notifications' %}" class="btn btn-sm btn-outline-dark">View Alerts</a>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
     
     <!-- Main Content -->
     <main>
+        <!-- Messages Display -->
+        {% if messages %}
+        <div class="container mt-3">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {% if message.tags == 'success' %}
+                <i class="fas fa-check-circle me-2"></i>
+                {% elif message.tags == 'error' or message.tags == 'danger' %}
+                <i class="fas fa-exclamation-circle me-2"></i>
+                {% elif message.tags == 'warning' %}
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                {% elif message.tags == 'info' %}
+                <i class="fas fa-info-circle me-2"></i>
+                {% endif %}
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% block content %}
-        
+        <!-- Page content will be injected here -->
         {% endblock %}
     </main>
 
@@ -32,8 +126,454 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery (optional, for AJAX operations) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Custom JS -->
     <script src="{% static 'js/script.js' %}"></script>
+    
+    <!-- Real Implementation Scripts -->
+    <script>
+        // Real notification polling
+        {% if user.is_authenticated %}
+        function checkRealNotifications() {
+            fetch("{% url 'bika:unread_notifications_count' %}")
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Notification data:', data);
+                    const notificationCount = document.getElementById('notificationCount');
+                    if (notificationCount) {
+                        notificationCount.textContent = data.unread_count || 0;
+                    }
+                    
+                    // Show alert for critical notifications
+                    if (data.critical_count > 0) {
+                        showCriticalAlert(data.critical_count);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking notifications:', error);
+                    // Fallback: Set count to 0 on error
+                    const notificationCount = document.getElementById('notificationCount');
+                    if (notificationCount) {
+                        notificationCount.textContent = '0';
+                    }
+                });
+        }
+
+        function showCriticalAlert(criticalCount) {
+            const alertBanner = document.getElementById('realTimeAlerts');
+            if (alertBanner) {
+                document.getElementById('alertTitle').textContent = 'Critical Alert:';
+                document.getElementById('alertMessage').textContent = 
+                    `${criticalCount} urgent product issue(s) detected`;
+                alertBanner.classList.remove('d-none');
+                alertBanner.classList.add('show');
+                
+                // Auto-hide after 10 seconds for non-critical users
+                setTimeout(() => {
+                    if (alertBanner.classList.contains('show')) {
+                        alertBanner.classList.remove('show');
+                        setTimeout(() => alertBanner.classList.add('d-none'), 150);
+                    }
+                }, 10000);
+            }
+        }
+
+        // Check notifications every 30 seconds
+        setInterval(checkRealNotifications, 30000);
+        // Initial check after page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(checkRealNotifications, 1000);
+        });
+        {% endif %}
+
+        // Real barcode scanning
+        window.initializeRealBarcodeScanner = function() {
+            const video = document.getElementById('barcodeScanner');
+            if (video && navigator.mediaDevices) {
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                })
+                .then(function(stream) {
+                    video.srcObject = stream;
+                    video.play();
+                    
+                    // Initialize barcode detection
+                    initializeBarcodeDetection(video);
+                })
+                .catch(function(error) {
+                    console.error("Camera access error:", error);
+                    alert("Unable to access camera. Please check permissions.");
+                });
+            }
+        };
+
+        // Barcode detection using Barcode Detection API
+        function initializeBarcodeDetection(video) {
+            if (!('BarcodeDetector' in window)) {
+                console.warn('Barcode Detection API not supported');
+                return;
+            }
+
+            const barcodeDetector = new BarcodeDetector({
+                formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a']
+            });
+
+            function detectBarcode() {
+                barcodeDetector.detect(video)
+                    .then(barcodes => {
+                        if (barcodes.length > 0) {
+                            const barcode = barcodes[0];
+                            handleDetectedBarcode(barcode.rawValue);
+                        }
+                        // Continue detection
+                        requestAnimationFrame(detectBarcode);
+                    })
+                    .catch(err => {
+                        console.error('Barcode detection error:', err);
+                        // Continue detection even on error
+                        requestAnimationFrame(detectBarcode);
+                    });
+            }
+
+            detectBarcode();
+        }
+
+        function handleDetectedBarcode(barcodeValue) {
+            console.log('Barcode detected:', barcodeValue);
+            
+            // Show loading indicator
+            const loadingIndicator = document.getElementById('scanLoading');
+            if (loadingIndicator) {
+                loadingIndicator.classList.remove('d-none');
+            }
+
+            // Look up product
+            fetch(`/api/product/${barcodeValue}/`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Product not found');
+                    }
+                    return response.json();
+                })
+                .then(productData => {
+                    // Redirect to product page or show product info
+                    if (productData.slug) {
+                        window.location.href = `/products/${productData.slug}/`;
+                    } else {
+                        alert('Product found but no details available.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Product lookup error:', error);
+                    alert('Product not found. Please try another barcode.');
+                })
+                .finally(() => {
+                    // Hide loading indicator
+                    if (loadingIndicator) {
+                        loadingIndicator.classList.add('d-none');
+                    }
+                });
+        }
+
+        // Real product tracking
+        window.trackRealProduct = function(productBarcode) {
+            return fetch(`/api/product/${productBarcode}/`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Product not found');
+                    }
+                    return response.json();
+                })
+                .then(productData => {
+                    return productData;
+                });
+        };
+
+        // Cart management functions
+        window.addToCart = function(productId, quantity = 1) {
+            const formData = new FormData();
+            formData.append('product_id', productId);
+            formData.append('quantity', quantity);
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            return fetch('{% url "bika:add_to_cart" product_id=0 %}'.replace('0', productId), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update cart count in navbar
+                    updateCartCount(data.cart_count);
+                    return data;
+                } else {
+                    throw new Error(data.message || 'Failed to add to cart');
+                }
+            });
+        };
+
+        function updateCartCount(count) {
+            const cartBadge = document.querySelector('.cart-count-badge');
+            if (cartBadge) {
+                cartBadge.textContent = count;
+                cartBadge.style.display = count > 0 ? 'inline' : 'none';
+            }
+        }
+
+        // Wishlist management
+        window.toggleWishlist = function(productId) {
+            const wishlistButton = document.querySelector(`[data-product-id="${productId}"]`);
+            const isInWishlist = wishlistButton.classList.contains('active');
+
+            const url = isInWishlist ? 
+                '{% url "bika:remove_from_wishlist" product_id=0 %}'.replace('0', productId) :
+                '{% url "bika:add_to_wishlist" product_id=0 %}'.replace('0', productId);
+
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Toggle button state
+                    wishlistButton.classList.toggle('active');
+                    wishlistButton.classList.toggle('text-danger');
+                    wishlistButton.querySelector('i').classList.toggle('fas');
+                    wishlistButton.querySelector('i').classList.toggle('far');
+                    
+                    // Update wishlist count
+                    const wishlistBadge = document.querySelector('.wishlist-count-badge');
+                    if (wishlistBadge) {
+                        wishlistBadge.textContent = data.wishlist_count;
+                    }
+                    
+                    return data;
+                }
+                throw new Error(data.message || 'Wishlist operation failed');
+            });
+        };
+
+        // Search functionality
+        window.performSearch = function(query) {
+            if (query.trim().length < 2) {
+                return;
+            }
+            
+            const searchForm = document.getElementById('searchForm');
+            if (searchForm) {
+                searchForm.submit();
+            } else {
+                window.location.href = `{% url 'bika:product_search' %}?q=${encodeURIComponent(query)}`;
+            }
+        };
+
+        // Initialize all real features
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing Bika E-commerce Platform...');
+            
+            // Initialize features based on current page
+            if (document.getElementById('barcodeScanner')) {
+                initializeRealBarcodeScanner();
+            }
+            
+            // Auto-hide messages after 5 seconds
+            const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    if (alert.classList.contains('show')) {
+                        const bsAlert = new bootstrap.Alert(alert);
+                        bsAlert.close();
+                    }
+                }, 5000);
+            });
+            
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+            
+            // Initialize popovers
+            const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+            const popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+                return new bootstrap.Popover(popoverTriggerEl);
+            });
+        });
+
+        // Error handling for AJAX requests
+        window.handleAjaxError = function(error) {
+            console.error('AJAX Error:', error);
+            // Show user-friendly error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger alert-dismissible fade show';
+            errorDiv.innerHTML = `
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Error:</strong> ${error.message || 'Something went wrong. Please try again.'}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            // Insert at the top of main content
+            const main = document.querySelector('main');
+            if (main) {
+                main.insertBefore(errorDiv, main.firstChild);
+            }
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.remove();
+                }
+            }, 5000);
+        };
+
+        // Utility function for API calls
+        window.makeApiCall = function(url, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            };
+            
+            return fetch(url, { ...defaultOptions, ...options })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    handleAjaxError(error);
+                    throw error;
+                });
+        };
+
+        // Shopping cart functions
+        window.updateCartQuantity = function(productId, newQuantity) {
+            if (newQuantity < 1) {
+                // Remove item if quantity is 0
+                window.removeFromCart(productId);
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('quantity', newQuantity);
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            return fetch('{% url "bika:update_cart" product_id=0 %}'.replace('0', productId), {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update cart totals
+                    if (data.total_price !== undefined) {
+                        const totalElement = document.querySelector('.cart-total-price');
+                        if (totalElement) {
+                            totalElement.textContent = `$${parseFloat(data.total_price).toFixed(2)}`;
+                        }
+                    }
+                    return data;
+                } else {
+                    throw new Error(data.message || 'Failed to update cart');
+                }
+            });
+        };
+
+        window.removeFromCart = function(productId) {
+            return fetch('{% url "bika:remove_from_cart" product_id=0 %}'.replace('0', productId), {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove item from DOM
+                    const cartItem = document.querySelector(`[data-cart-item="${productId}"]`);
+                    if (cartItem) {
+                        cartItem.remove();
+                    }
+                    
+                    // Update cart count and totals
+                    updateCartCount(data.cart_count);
+                    
+                    if (data.total_price !== undefined) {
+                        const totalElement = document.querySelector('.cart-total-price');
+                        if (totalElement) {
+                            totalElement.textContent = `$${parseFloat(data.total_price).toFixed(2)}`;
+                        }
+                    }
+                    
+                    return data;
+                } else {
+                    throw new Error(data.message || 'Failed to remove from cart');
+                }
+            });
+        };
+
+        // Quick view product modal
+        window.showQuickView = function(productId) {
+            fetch(`/api/products/${productId}/quick-view/`)
+                .then(response => response.json())
+                .then(product => {
+                    // Populate quick view modal
+                    const modal = new bootstrap.Modal(document.getElementById('quickViewModal'));
+                    const modalBody = document.getElementById('quickViewBody');
+                    
+                    modalBody.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <img src="${product.image}" alt="${product.name}" class="img-fluid">
+                            </div>
+                            <div class="col-md-6">
+                                <h4>${product.name}</h4>
+                                <p class="text-muted">${product.category}</p>
+                                <p class="h4 text-primary">$${product.price}</p>
+                                <p>${product.short_description}</p>
+                                <div class="mt-3">
+                                    <button onclick="addToCart(${productId})" class="btn btn-primary">
+                                        <i class="fas fa-shopping-cart"></i> Add to Cart
+                                    </button>
+                                    <button onclick="toggleWishlist(${productId})" class="btn btn-outline-secondary">
+                                        <i class="far fa-heart"></i> Wishlist
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('Error loading quick view:', error);
+                    alert('Error loading product details.');
+                });
+        };
+    </script>
     
     {% block extra_js %}{% endblock %}
 </body>

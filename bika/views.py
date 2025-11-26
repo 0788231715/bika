@@ -11,10 +11,19 @@ from django.views.generic import ListView, DetailView, TemplateView
 from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
+# api_views.py - REAL IMPLEMENTATION
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+import json
+import pandas as pd
+
+from bika.notification import RealNotificationService
+from bika.service import RealProductAIService
 
 # Import models
 from .models import (
-    SiteInfo, Service, Testimonial, ContactMessage, FAQ,
+    Notification, ProductAlert, ProductDataset, RealTimeSensorData, SiteInfo, Service, StorageLocation, Testimonial, ContactMessage, FAQ,
     CustomUser, Product, ProductCategory, ProductImage, ProductReview,
     Wishlist, Cart, Order, OrderItem
 )
@@ -26,6 +35,33 @@ from .forms import (
     ProductImageForm
 )
 from bika import models
+
+from .models import (
+    ProductDataset, SiteInfo, Service, Testimonial, ContactMessage, FAQ,
+    CustomUser, Product, ProductCategory, ProductImage, ProductReview,
+    Wishlist, Cart, Order, OrderItem, StorageLocation, ProductAlert, 
+    Notification, RealTimeSensorData, TrainedModel  # ADD THESE
+)
+# ... other imports ...
+
+try:
+    from bika.notification import RealNotificationService
+    from bika.service import RealProductAIService
+    AI_SERVICES_AVAILABLE = True
+except ImportError as e:
+    print(f"AI services not available: {e}")
+    AI_SERVICES_AVAILABLE = False
+    # Create dummy classes for fallback
+    class RealNotificationService:
+        def __init__(self):
+            pass
+        def run_daily_analysis(self):
+            print("AI services not available - running in fallback mode")
+    
+    class RealProductAIService:
+        def __init__(self):
+            pass
+
 class HomeView(TemplateView):
     template_name = 'bika/home.html'
     
@@ -835,3 +871,240 @@ def custom_404(request, exception):
 
 def custom_500(request):
     return render(request, 'bika/pages/500.html', status=500)
+
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def upload_dataset(request):
+    """Upload real dataset for training"""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    try:
+        dataset_file = request.FILES['dataset_file']
+        dataset_type = request.POST['dataset_type']
+        name = request.POST['name']
+        description = request.POST.get('description', '')
+        
+        # Validate file type
+        if not dataset_file.name.endswith('.csv'):
+            return JsonResponse({'error': 'Only CSV files are supported'}, status=400)
+        
+        # Read and validate dataset
+        df = pd.read_csv(dataset_file)
+        
+        # Create dataset record
+        dataset = ProductDataset.objects.create(
+            name=name,
+            dataset_type=dataset_type,
+            description=description,
+            data_file=dataset_file,
+            columns=list(df.columns),
+            row_count=len(df)
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'dataset_id': dataset.id,
+            'columns': list(df.columns),
+            'row_count': len(df)
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def train_model(request):
+    """Train model on uploaded dataset"""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        dataset_id = data['dataset_id']
+        model_type = data['model_type']
+        
+        ai_service = RealProductAIService()
+        trained_model = ai_service.train_anomaly_detection_model(dataset_id)
+        
+        if trained_model:
+            return JsonResponse({
+                'success': True,
+                'model_id': trained_model.id,
+                'model_name': trained_model.name
+            })
+        else:
+            return JsonResponse({'error': 'Model training failed'}, status=400)
+            
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def receive_sensor_data(request):
+    """Receive real sensor data from embedded systems"""
+    try:
+        data = json.loads(request.body)
+        
+        # Validate required fields
+        required_fields = ['product_barcode', 'sensor_type', 'value', 'location_id']
+        for field in required_fields:
+            if field not in data:
+                return JsonResponse({'error': f'Missing field: {field}'}, status=400)
+        
+        # Get product and location
+        product = Product.objects.get(barcode=data['product_barcode'])
+        location = StorageLocation.objects.get(id=data['location_id'])
+        
+        # Save sensor reading
+        sensor_reading = RealTimeSensorData.objects.create(
+            product=product,
+            sensor_type=data['sensor_type'],
+            value=data['value'],
+            unit=data.get('unit', ''),
+            location=location
+        )
+        
+        # Analyze for alerts
+        ai_service = RealProductAIService()
+        alerts = ai_service.analyze_sensor_data([sensor_reading])
+        
+        # Process alerts
+        if alerts:
+            notification_service = RealNotificationService()
+            notification_service.process_sensor_alerts(alerts)
+        
+        return JsonResponse({'status': 'success', 'alerts_generated': len(alerts)})
+        
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
+    except StorageLocation.DoesNotExist:
+        return JsonResponse({'error': 'Location not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    
+# Add these to your views.py
+
+@login_required
+def notifications_view(request):
+    """User notifications page"""
+    notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+    unread_count = notifications.filter(is_read=False).count()
+    
+    context = {
+        'notifications': notifications,
+        'unread_count': unread_count,
+    }
+    return render(request, 'bika/pages/user/notifications.html', context)
+
+@login_required
+def mark_notification_read(request, notification_id):
+    """Mark notification as read"""
+    notification = get_object_or_404(Notification, id=notification_id, user=request.user)
+    notification.is_read = True
+    notification.save()
+    
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'success': True})
+    
+    return redirect('bika:notifications')
+
+@login_required
+def unread_notifications_count(request):
+    """API endpoint for unread notifications count"""
+    if request.user.is_authenticated:
+        unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
+        critical_count = Notification.objects.filter(
+            user=request.user, 
+            is_read=False,
+            notification_type='urgent_alert'
+        ).count()
+        
+        return JsonResponse({
+            'unread_count': unread_count,
+            'critical_count': critical_count
+        })
+    return JsonResponse({'unread_count': 0, 'critical_count': 0})
+
+@staff_member_required
+def storage_sites(request):
+    """Storage sites management"""
+    sites = StorageLocation.objects.all()
+    
+    context = {
+        'sites': sites,
+    }
+    return render(request, 'bika/pages/admin/storage_sites.html', context)
+
+@login_required
+def track_my_products(request):
+    """Track vendor's products"""
+    if not request.user.is_vendor() and not request.user.is_staff:
+        messages.error(request, "Access denied.")
+        return redirect('bika:home')
+    
+    # Get vendor's products with alerts
+    if request.user.is_staff:
+        products = Product.objects.all()
+        alerts = ProductAlert.objects.filter(is_resolved=False)
+    else:
+        products = Product.objects.filter(vendor=request.user)
+        alerts = ProductAlert.objects.filter(product__vendor=request.user, is_resolved=False)
+    
+    context = {
+        'products': products,
+        'alerts': alerts,
+    }
+    return render(request, 'bika/pages/vendor/track_products.html', context)
+
+@login_required
+def scan_product(request):
+    """Product scanning interface"""
+    return render(request, 'bika/pages/scan_product.html')
+
+# API endpoints for mobile/scanner integration
+@csrf_exempt
+@require_http_methods(["GET"])
+def api_product_detail(request, barcode):
+    """API endpoint for product details by barcode"""
+    try:
+        product = Product.objects.get(barcode=barcode)
+        product_data = {
+            'id': product.id,
+            'name': product.name,
+            'barcode': product.barcode,
+            'sku': product.sku,
+            'price': str(product.price),
+            'stock_quantity': product.stock_quantity,
+            'status': product.status,
+            'vendor': product.vendor.business_name,
+            'category': product.category.name,
+        }
+        return JsonResponse(product_data)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
+
+@login_required
+def mark_all_notifications_read(request):
+    """Mark all notifications as read for the current user"""
+    Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+    
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'success': True})
+    
+    messages.success(request, 'All notifications marked as read!')
+    return redirect('bika:notifications')
+
+@login_required
+def delete_notification(request, notification_id):
+    """Delete a specific notification"""
+    notification = get_object_or_404(Notification, id=notification_id, user=request.user)
+    notification.delete()
+    
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'success': True})
+    
+    messages.success(request, 'Notification deleted!')
+    return redirect('bika:notifications')

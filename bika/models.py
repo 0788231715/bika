@@ -79,6 +79,7 @@ class Product(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
     sku = models.CharField(max_length=100, unique=True, verbose_name="SKU")
+    barcode = models.CharField(max_length=100, blank=True, unique=True, null=True)
     description = models.TextField()
     short_description = models.TextField(max_length=300, blank=True)
     
@@ -170,7 +171,7 @@ class Product(models.Model):
             status='active'
         ).exclude(id=self.id)[:limit]
 
-# FIXED: Product Image Model
+# Product Image Model
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='products/')
@@ -218,7 +219,7 @@ class ProductReview(models.Model):
     def __str__(self):
         return f"Review by {self.user.username} for {self.product.name}"
 
-# Site Information Model (KEEP THIS ONE - REMOVED DUPLICATE)
+# Site Information Model
 class SiteInfo(models.Model):
     """Store site-wide information"""
     name = models.CharField(max_length=200, default="Bika")
@@ -274,7 +275,7 @@ class SiteInfo(models.Model):
             return
         super().save(*args, **kwargs)
 
-# Service Model (KEEP THIS ONE - REMOVED DUPLICATE)
+# Service Model
 class Service(models.Model):
     """Services offered by Bika"""
     name = models.CharField(max_length=200)
@@ -296,7 +297,7 @@ class Service(models.Model):
     def get_absolute_url(self):
         return reverse('bika:service_detail', kwargs={'slug': self.slug})
 
-# Testimonial Model (KEEP THIS ONE - REMOVED DUPLICATE)
+# Testimonial Model
 class Testimonial(models.Model):
     """Customer testimonials"""
     name = models.CharField(max_length=200)
@@ -315,7 +316,7 @@ class Testimonial(models.Model):
     def __str__(self):
         return f"Testimonial from {self.name}"
 
-# Contact Message Model (KEEP THIS ONE - REMOVED DUPLICATE)
+# Contact Message Model
 class ContactMessage(models.Model):
     """Contact form messages"""
     STATUS_CHOICES = [
@@ -346,7 +347,7 @@ class ContactMessage(models.Model):
         self.replied_at = timezone.now()
         self.save()
 
-# FAQ Model (KEEP THIS ONE - REMOVED DUPLICATE)
+# FAQ Model
 class FAQ(models.Model):
     """Frequently Asked Questions"""
     question = models.CharField(max_length=300)
@@ -362,7 +363,7 @@ class FAQ(models.Model):
     
     def __str__(self):
         return self.question
-    
+
 class Wishlist(models.Model):
     """User wishlist model"""
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -422,7 +423,11 @@ class Order(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.order_number:
-            self.order_number = f"ORD{timezone.now().strftime('%Y%m%d')}{self.id or ''}"
+            # Generate order number when saving for the first time
+            import random
+            import string
+            random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            self.order_number = f"ORD{timezone.now().strftime('%Y%m%d')}{random_str}"
         super().save(*args, **kwargs)
 
 class OrderItem(models.Model):
@@ -437,4 +442,146 @@ class OrderItem(models.Model):
     
     @property
     def total_price(self):
-        return self.price * self.quantity    
+        return self.price * self.quantity
+
+# AI and Storage Models
+class StorageLocation(models.Model):
+    """Storage location for products"""
+    name = models.CharField(max_length=200)
+    address = models.TextField()
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    capacity = models.IntegerField(default=0)
+    current_occupancy = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return self.name
+    
+    @property
+    def available_capacity(self):
+        return self.capacity - self.current_occupancy
+
+class ProductDataset(models.Model):
+    DATASET_TYPES = [
+        ('anomaly_detection', 'Anomaly Detection'),
+        ('sales_forecast', 'Sales Forecasting'),
+        ('inventory_optimization', 'Inventory Optimization'),
+        ('quality_control', 'Quality Control'),
+    ]
+    
+    name = models.CharField(max_length=200)
+    dataset_type = models.CharField(max_length=50, choices=DATASET_TYPES)
+    description = models.TextField()
+    data_file = models.FileField(upload_to='datasets/')
+    columns = models.JSONField(default=dict)  # Store column metadata
+    row_count = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_dataset_type_display()})"
+
+class TrainedModel(models.Model):
+    MODEL_TYPES = [
+        ('anomaly_detection', 'Anomaly Detection'),
+        ('sales_forecast', 'Sales Forecasting'),
+        ('stock_prediction', 'Stock Prediction'),
+    ]
+    
+    name = models.CharField(max_length=200)
+    model_type = models.CharField(max_length=50, choices=MODEL_TYPES)
+    dataset = models.ForeignKey(ProductDataset, on_delete=models.CASCADE)
+    model_file = models.FileField(upload_to='trained_models/')
+    accuracy = models.FloatField(null=True, blank=True)
+    training_date = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    feature_columns = models.JSONField(default=list)
+    
+    def __str__(self):
+        return f"{self.name} - {self.get_model_type_display()}"
+
+class RealTimeSensorData(models.Model):
+    SENSOR_TYPES = [
+        ('temperature', 'Temperature'),
+        ('humidity', 'Humidity'),
+        ('weight', 'Weight'),
+        ('vibration', 'Vibration'),
+        ('pressure', 'Pressure'),
+    ]
+    
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    sensor_type = models.CharField(max_length=50, choices=SENSOR_TYPES)
+    value = models.FloatField()
+    unit = models.CharField(max_length=20)
+    location = models.ForeignKey(StorageLocation, on_delete=models.CASCADE)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['product', 'sensor_type', 'recorded_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.sensor_type} - {self.product.name} - {self.value}{self.unit}"
+
+class ProductAlert(models.Model):
+    """Product quality and stock alerts"""
+    ALERT_TYPES = [
+        ('stock_low', 'Low Stock'),
+        ('expiry_near', 'Near Expiry'),
+        ('quality_issue', 'Quality Issue'),
+        ('temperature_anomaly', 'Temperature Anomaly'),
+        ('humidity_issue', 'Humidity Issue'),
+        ('ai_anomaly', 'AI Detected Anomaly'),
+    ]
+    
+    SEVERITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+    
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    alert_type = models.CharField(max_length=50, choices=ALERT_TYPES)
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES)
+    message = models.TextField()
+    detected_by = models.CharField(max_length=50)  # ai_system, sensor_system, manual
+    is_resolved = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_alert_type_display()} - {self.product.name}"
+
+class Notification(models.Model):
+    """User notifications"""
+    NOTIFICATION_TYPES = [
+        ('product_alert', 'Product Alert'),
+        ('order_update', 'Order Update'),
+        ('system_alert', 'System Alert'),
+        ('urgent_alert', 'Urgent Alert'),
+    ]
+    
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
+    is_read = models.BooleanField(default=False)
+    related_object_type = models.CharField(max_length=100, blank=True)  # e.g., 'product_alert', 'order'
+    related_object_id = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.user.username}"
